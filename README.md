@@ -1,7 +1,7 @@
 # Data-analysis-projects-anab
 A collection of beginner-friendly data analysis projects built with Excel
 
-Updated README with Business Sales Dashboard 
+Updated README with Business Sales Dashboard.
 
 This project was completed as part of a Business Analytics with Excel course. The goal was to transform raw sales data into an interactive and visually compelling dashboard that supports business decision-making.
 
