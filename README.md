@@ -1,5 +1,5 @@
 # Data-analysis-projects-anab
-A collection of beginner-friendly data analysis projects built with Excel/Google Sheets
+A collection of beginner-friendly data analysis projects built with Excel
 
 Updated README with Business Sales Dashboard 
 
