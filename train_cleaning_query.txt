@@ -6,6 +6,16 @@ let
     #"Added Custom" = Table.AddColumn(#"Changed Type", "StoreDataKey", each Text.From([Store]) & "_" & Text.From([Date])),
     #"Changed Type1" = Table.TransformColumnTypes(#"Added Custom",{{"StoreDataKey", type text}}),
     #"Merged Queries" = Table.NestedJoin(#"Changed Type1", {"StoreDataKey"}, features, {"StoreDateKey"}, "features", JoinKind.LeftOuter),
-    #"Expanded features" = Table.ExpandTableColumn(#"Merged Queries", "features", {"Temperature", "Fuel_Price", "CPI", "Unemployment", "IsHoliday"}, {"Temperature", "Fuel_Price", "CPI", "Unemployment", "IsHoliday.1"})
+    #"Expanded features" = Table.ExpandTableColumn(#"Merged Queries", "features", {"Temperature", "Fuel_Price", "CPI", "Unemployment", "IsHoliday"}, {"Temperature", "Fuel_Price", "CPI", "Unemployment", "IsHoliday.1"}),
+    #"Added Custom1" = Table.AddColumn(#"Expanded features", "Week_Label", each Text.From(Date.Year([Date])) & "-W" & Text.PadStart(Text.From(Date.WeekOfYear([Date])), 2, "0")),
+    #"Changed Type2" = Table.TransformColumnTypes(#"Added Custom1",{{"Week_Label", type text}}),
+    #"Inserted Year" = Table.AddColumn(#"Changed Type2", "Year", each Date.Year([Date]), Int64.Type),
+    #"Merged Queries1" = Table.NestedJoin(#"Inserted Year", {"StoreDataKey"}, features, {"StoreDateKey"}, "features", JoinKind.LeftOuter),
+    #"Expanded features1" = Table.ExpandTableColumn(#"Merged Queries1", "features", {"MarkDown1", "MarkDown2", "MarkDown3", "MarkDown4", "MarkDown5"}, {"features.MarkDown1", "features.MarkDown2", "features.MarkDown3", "features.MarkDown4", "features.MarkDown5"}),
+    #"Merged Queries2" = Table.NestedJoin(#"Expanded features1", {"Store"}, stores, {"Store"}, "stores", JoinKind.LeftOuter),
+    #"Expanded stores" = Table.ExpandTableColumn(#"Merged Queries2", "stores", {"Type", "Size"}, {"stores.Type", "stores.Size"}),
+    #"Inserted Month Name" = Table.AddColumn(#"Expanded stores", "Month Name", each Date.MonthName([Date]), type text),
+    #"Added Custom2" = Table.AddColumn(#"Inserted Month Name", "Month_Year", each [Month Name] & "-" & Text.From([Year])),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom2",{"IsHoliday.1"})
 in
-    #"Expanded features"
+    #"Removed Columns"
