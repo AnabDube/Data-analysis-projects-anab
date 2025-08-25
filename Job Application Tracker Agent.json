@@ -1,0 +1,354 @@
+{
+  "name": "Job Application Tracker Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "44598002-a15f-40c6-a8f2-e46be36eef4b",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -336,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "filters": {
+          "q": "subject:(application) in:sent"
+        }
+      },
+      "id": "bcdb66f6-af6a-4c51-90f4-9aa0e802597f",
+      "name": "Gmail Search Applications",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -112,
+        448
+      ],
+      "webhookId": "f1149843-f087-405a-b932-ab71b59d8ab0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MEU9BAheVckXNVPI",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract application details from Gmail data\nconst emailData = $input.item.json;\n\n// Extract basic email information\nconst subject = emailData.Subject || emailData.subject || '';\nconst body = emailData.snippet || emailData.body || '';\nconst originalTo = emailData.To || emailData.to || '';\n\n// Safer date parsing with error handling\nlet dateReceived;\ntry {\n  // Gmail's internalDate is in milliseconds since epoch\n  if (emailData.internalDate) {\n    // Convert string to number if needed\n    const timestamp = typeof emailData.internalDate === 'string' ? \n      parseInt(emailData.internalDate, 10) : emailData.internalDate;\n    dateReceived = new Date(timestamp);\n  } else if (emailData.date) {\n    dateReceived = new Date(emailData.date);\n  } else {\n    // Fallback to current date if no date available\n    dateReceived = new Date();\n  }\n  \n  // Check if date is valid\n  if (isNaN(dateReceived.getTime())) {\n    console.log('Invalid date detected, using current date as fallback');\n    dateReceived = new Date();\n  }\n} catch (error) {\n  console.log('Error parsing date:', error.message, 'Using current date as fallback');\n  dateReceived = new Date();\n}\n\nconst today = new Date();\n\n// Calculate days since application\nconst daysSince = Math.floor((today - dateReceived) / (1000 * 60 * 60 * 24));\n\n// Extract company name from subject or body\nlet company = '';\nconst companyPatterns = [\n  /(?:application|applied)\\s+(?:to|at)\\s+([A-Za-z0-9\\s&.,'-]+?)(?:\\s+for|\\s+as|\\s+-|$)/i,\n  /([A-Za-z0-9\\s&.,'-]+?)\\s+(?:job|position|role|application)/i,\n  /from:\\s*([A-Za-z0-9\\s&.,'-]+?)\\s*</i\n];\n\nfor (const pattern of companyPatterns) {\n  const match = subject.match(pattern) || body.match(pattern);\n  if (match && match[1]) {\n    company = match[1].trim();\n    break;\n  }\n}\n\n// Extract position from subject or body\nlet position = '';\nconst positionPatterns = [\n  /(?:for|as)\\s+(?:a\\s+)?([A-Za-z0-9\\s&.,'-]+?)\\s+(?:position|role|at|with)/i,\n  /position:\\s*([A-Za-z0-9\\s&.,'-]+)/i,\n  /role:\\s*([A-Za-z0-9\\s&.,'-]+)/i,\n  /([A-Za-z0-9\\s&.,'-]+?)\\s+(?:developer|engineer|manager|analyst|specialist|coordinator)/i\n];\n\nfor (const pattern of positionPatterns) {\n  const match = subject.match(pattern) || body.match(pattern);\n  if (match && match[1]) {\n    position = match[1].trim();\n    break;\n  }\n}\n\n// Extract recipient email for follow-up\nlet recipientEmail = '';\nif (originalTo) {\n  // Extract email from \"Name <email@domain.com>\" format or just \"email@domain.com\"\n  const emailMatch = originalTo.match(/<([^>]+)>/) || originalTo.match(/([\\w.-]+@[\\w.-]+\\.[\\w]+)/);\n  if (emailMatch && emailMatch[1]) {\n    recipientEmail = emailMatch[1].trim();\n  } else {\n    recipientEmail = originalTo.trim();\n  }\n}\n\n// Determine if follow-up is needed based on timing and content\nlet needsFollowup = false;\nconst followupKeywords = ['follow up', 'follow-up', 'check in', 'status', 'update'];\nconst hasFollowupKeywords = followupKeywords.some(keyword => \n  subject.toLowerCase().includes(keyword) || body.toLowerCase().includes(keyword)\n);\n\n// Follow-up logic:\n// - If 7-14 days since application and no recent follow-up keywords\n// - If 21+ days since application\nif ((daysSince >= 7 && daysSince <= 14 && !hasFollowupKeywords) || daysSince >= 21) {\n  needsFollowup = true;\n}\n\n// Safe date formatting with error handling\nlet applicationDateString;\ntry {\n  applicationDateString = dateReceived.toISOString().split('T')[0];\n} catch (error) {\n  console.log('Error formatting date:', error.message);\n  applicationDateString = new Date().toISOString().split('T')[0];\n}\n\n// Return structured data\nreturn {\n  json: {\n    company: company || 'Unknown Company',\n    position: position || 'Unknown Position',\n    daysSince: daysSince,\n    needsFollowup: needsFollowup,\n    originalSubject: subject,\n    originalTo: originalTo,\n    recipientEmail: recipientEmail,\n    applicationDate: applicationDateString,\n    emailId: emailData.id || emailData.messageId\n  }\n};"
+      },
+      "id": "340969a6-7ed5-42a4-ab33-fb70e9ffe967",
+      "name": "Process Application Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Process Application Data').item.json.daysSince }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e0156990-6e56-42a5-b87b-fb2143cecbf8",
+      "name": "Check Follow-up Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        336,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "followUpSubject",
+              "value": "=Following up on my application for {{ $json.position }} position",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "followUpMessage",
+              "value": "=Dear Hiring Manager,\n\nI hope this email finds you well. I am writing to follow up on my application for the {{ $json.position }} position that I submitted on {{ $json.applicationDate }}.\n\nI remain very interested in this opportunity and would welcome the chance to discuss how my skills and experience align with your team's needs. I am happy to provide any additional information you may require or to schedule a conversation at your convenience.\n\nThank you for your time and consideration. I look forward to hearing from you.\n\nBest regards,\n{{ $json.applicantName }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "recipientEmail",
+              "value": "={{ $('Gmail Search Applications').item.json.To }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "originalTo",
+              "value": "={{ $('Gmail Search Applications').item.json.To }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1f0d90f-f5d2-457c-bbf8-ca9645d552e1",
+      "name": "Prepare Follow-up Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $('Prepare Follow-up Data').item.json.followUpSubject }}",
+        "message": "={{ $('Prepare Follow-up Data').item.json.followUpMessage }}",
+        "options": {}
+      },
+      "id": "f4f9cf7f-b60c-4806-be00-25117044bbbb",
+      "name": "Send Follow-up Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        784,
+        448
+      ],
+      "webhookId": "908f454e-8ce4-4f96-aa63-9cf49e72b008",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "hm3muHnMnHWIInlb",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1INE4xX5OvNxFp5-M4ZgFHhAuUJE0bRydHGrze4pW2m4",
+          "mode": "list",
+          "cachedResultName": "Email Subjects",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1INE4xX5OvNxFp5-M4ZgFHhAuUJE0bRydHGrze4pW2m4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1INE4xX5OvNxFp5-M4ZgFHhAuUJE0bRydHGrze4pW2m4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "REG.NO": "{{$json[\"REG.NO\"]}} "
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "REG.NO",
+              "displayName": "REG.NO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "NAMES",
+              "displayName": "NAMES",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "MON",
+              "displayName": "MON",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "TUE",
+              "displayName": "TUE",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "WED",
+              "displayName": "WED",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ATTENDANCE%",
+              "displayName": "ATTENDANCE%",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a342e74f-fb76-4f92-a4ab-5d38e6d7f3c4",
+      "name": "Log Follow-up to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1008,
+        448
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3vFasXLniFeTP6q4",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Job Application Tracker\n\nThis workflow tracks my job applications by checking Gmail.\nIt records applications in Google Sheets, waits 14 days, \nand if no response is received, automatically sends a \npolite follow-up email to the company.\n",
+        "height": 224,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -640,
+        368
+      ],
+      "typeVersion": 1,
+      "id": "9acc2b29-dbf4-43b8-b6f7-54a8a4bbc530",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Gmail Search Applications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Search Applications": {
+      "main": [
+        [
+          {
+            "node": "Process Application Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Application Data": {
+      "main": [
+        [
+          {
+            "node": "Check Follow-up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Follow-up Needed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Follow-up Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Follow-up Data": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-up Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Follow-up Email": {
+      "main": [
+        [
+          {
+            "node": "Log Follow-up to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "875b52f6-c7c7-4335-813e-d481b8c965e8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3aa0333225ef4f007d13a8c88db23b90b6d7dcee6eaf6edfe5945dbb15649ffb"
+  },
+  "id": "6JuxTiwaFQ76Wa2P",
+  "tags": []
+}
